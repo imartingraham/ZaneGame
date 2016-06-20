@@ -1,0 +1,228 @@
+<!doctype html> 
+<html lang="en"> 
+<head> 
+	<meta charset="UTF-8" />
+	<title>Phaser - Making your first game, part 1</title>
+	<script type="text/javascript" src="js/phaser.min.js"></script>
+    <style type="text/css">
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript">
+
+var game = new Phaser.Game(800, 600, Phaser.AUTO, '', { 
+    preload: preload,
+    create: create,
+    update: update 
+  });
+
+var platforms;
+var cursors;
+var stars;
+var baddies;
+var score = 0;
+var scoreText;
+var life = 100;
+var lifeText;
+var isImmune = false;
+var level = 1;
+var levelText = 'Level 1';
+
+function preload() {
+  game.load.image('sky', 'assets/sky.png');
+  game.load.image('ground', 'assets/platform.png');
+  game.load.image('star', 'assets/star.png');
+  game.load.spritesheet('dude', 'assets/dude.png', 32,48);
+  game.load.spritesheet('baddie', 'assets/baddie.png', 32, 32);
+}
+
+function create() {
+  game.physics.startSystem(Phaser.Physics.ARCADE);
+
+  game.add.sprite(0,0, 'sky');
+
+  platforms = game.add.group();
+  platforms.enableBody = true;
+  var ground = platforms.create(0, game.world.height - 64, 'ground');
+  ground.scale.setTo(2,2);
+
+  ground.body.immovable = true;
+
+  var ledge = platforms.create(400,400, 'ground');
+
+  ledge.body.immovable = true;
+
+  ledge = platforms.create(-150,250, 'ground');
+  ledge.body.immovable = true;
+
+  player = game.add.sprite(32, game.world.height - 150, 'dude');
+
+  game.physics.arcade.enable(player);
+
+  // player.body.bounce.y = 0.2;
+  player.body.gravity.y = 300;
+  player.body.collideWorldBounds = true;
+
+  player.animations.add('left', [0,1,2,3], 10, true);
+  player.animations.add('right', [5,6,7,8], 10, true);
+
+  stars = game.add.group();
+  baddies = game.add.group();
+
+  regenerateStars();
+  regenerateBaddies();
+
+  scoreText = game.add.text(16,16, 'Score: 0', { fontSize: '32px', fill: '#000' });
+  lifeText = game.add.text(16, 48, 'Life: ' + life, { fontSize: '32px', fill: '#000' });
+
+  var pauseLabel = game.add.text(650, 20, 'Pause', { fontSize: '36px', fill: '#fff' });
+
+  pauseLabel.inputEnabled = true;
+  pauseLabel.events.onInputUp.add(function() {
+    console.log('pausing');
+    game.paused = !game.paused;
+    pauseLabel.text = game.paused ? 'Unpause' : 'Pause';
+  });
+
+  game.input.onDown.add(function(){
+    if(game.paused){
+      game.paused = !game.paused;
+      pauseLabel.text = game.paused ? 'Unpause' : 'Pause';
+    }
+  }, this);
+
+  levelText = game.add.text(16, 76, 'Level ' + level, { fontSize: '32px', fill: '#000' });
+
+  cursors = game.input.keyboard.createCursorKeys();
+
+}
+
+function update() {
+  game.physics.arcade.collide(player, platforms);
+  game.physics.arcade.collide(stars, platforms);
+  game.physics.arcade.collide(baddies, platforms);
+
+  game.physics.arcade.overlap(player, stars, collectStar, null, this);
+  game.physics.arcade.overlap(player, baddies, loseLife, null, this);
+  player.body.velocity.x = 0;
+
+  if(cursors.left.isDown){
+    player.body.velocity.x = -150;
+    player.animations.play('left');
+  }else if(cursors.right.isDown){
+    player.body.velocity.x = 150;
+    player.animations.play('right');
+  }else{
+    player.animations.stop();
+    player.frame = 4;
+  }
+
+  if(cursors.up.isDown && player.body.touching.down){
+    player.body.velocity.y = -350;
+  }
+
+  for(var i = 0; i < baddies.children.length; i++){
+    var baddie = baddies.children[i];
+    var pos = Math.round(baddie.position.x);
+    if(pos == 0){
+      baddie.animations.play('right');
+      baddie.body.velocity.x = 150;
+    } else if (pos >= (game.world.width - baddie.width)){
+      baddie.animations.play('left');
+      baddie.body.velocity.x = -150;
+    }
+  }
+}
+
+function regenerateStars(){
+  stars.enableBody = true;
+
+  for(var i = 0; i < 12; i++){
+    var star = stars.create(i * 70, 20, 'star');
+    star.body.gravity.y = 300;
+    star.body.bounce.y = 0.7 + Math.random() * 0.2;
+  }
+
+}
+
+function regenerateBaddies(num){
+  num = num || 2;
+  baddies.enableBody = true;
+
+  for (var i = 0; i < num; i++){
+    enemy = baddies.create(game.rnd.integerInRange(0,800), 20, 'baddie');
+    game.physics.arcade.enable(enemy);
+    enemy.body.gravity.y = 300;
+    enemy.body.bounce.y = 0.2;
+    enemy.body.collideWorldBounds = true;
+    enemy.animations.add('left', [0,1], 10, true);
+    enemy.animations.add('right', [2,3], 10, true);
+    var direction = getRandomDirection();
+    enemy.body.velocity.x = 50 * direction;
+    enemy.animations.play((direction == 1 ? 'right' : 'left'))
+    game.time.events.repeat(Phaser.Timer.SECOND * 3, 10, moveBaddie.bind(null, enemy), game);
+  }
+}
+
+function getRandomDirection(){
+  return Math.round(Math.random()) == 1 ? 1 : -1;
+}
+
+function collectStar(player, star) {
+  star.kill();
+  stars.removeChild(star);
+  score += 10;
+  scoreText.text = 'Score: ' + score;
+
+  if(!stars.children.length){
+    increaseLevel();
+  }
+}
+
+function increaseLevel(){
+  console.log('increased level');
+  level += 1;
+  levelText.text = 'Level: ' + level;
+  regenerateStars();
+}
+
+function loseLife(player, baddie){
+  if(!isImmune){
+    life -= 10;
+    lifeText.text = 'Life: ' + life;
+    if(life <= 0){
+      gameOver();
+    }
+    isImmune = true;
+    player.alpha = 0.4;
+    setTimeout(function(){
+      player.alpha = 1;
+      isImmune = false;
+    }, 1000);
+  }
+}
+
+function moveBaddie(baddie) {
+  mover = Math.round(Math.random());
+  if (mover) {
+    baddie.body.velocity.x = 100 * level;
+    baddie.animations.play('right', 20, true);
+  } else {
+    baddie.body.velocity.x = -100 * level;
+    baddie.animations.play('left', 20, true);
+  }
+}
+
+
+function gameOver(){
+  game.state.start(game.state.current);
+}
+
+</script>
+
+</body>
+</html>
